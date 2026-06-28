@@ -1,0 +1,311 @@
+#!/usr/bin/with-contenv bash
+# s6 service: Web UI for Meshnet status
+# Serves a status dashboard via nginx accessible through HA ingress
+
+set -euo pipefail
+
+# Create status script that nginx will proxy to
+cat > /usr/src/status.sh << 'SCRIPT'
+#!/bin/bash
+# Returns Meshnet status as JSON for the Web UI
+
+get_status() {
+    local status_output
+    status_output=$(nordvpn status 2>&1 || echo "")
+
+    local connected="false"
+    local meshnet_name="unknown"
+    local meshnet_ip="unknown"
+    local meshnet_status="disconnected"
+
+    if echo "$status_output" | grep -qi "Meshnet.*connected\|Status: Connected" 2>/dev/null; then
+        connected="true"
+        meshnet_status="connected"
+    fi
+
+    # Extract Nord name
+    if echo "$status_output" | grep -qP 'Meshnet name:' 2>/dev/null; then
+        meshnet_name=$(echo "$status_output" | grep -oP 'Meshnet name: \K.*' | head -1)
+    fi
+
+    # Extract Meshnet IP
+    if echo "$status_output" | grep -qP 'Meshnet IP:' 2>/dev/null; then
+        meshnet_ip=$(echo "$status_output" | grep -oP 'Meshnet IP: \K.*' | head -1)
+    fi
+
+    # Get peer list
+    local peers_json="[]"
+    if command -v nordvpn >/dev/null 2>&1; then
+        local peer_output
+        peer_output=$(nordvpn meshnet peer list 2>&1 || echo "")
+        if [ -n "$peer_output" ]; then
+            peers_json=$(echo "$peer_output" | grep -P '^\s+\S' | awk '{print $1}' | \
+                jq -R -s 'split("\n") | map(select(length > 0))' 2>/dev/null || echo "[]")
+        fi
+    fi
+
+    # Build JSON response
+    jq -n \
+        --argjson connected "$connected" \
+        --arg meshnet_name "$meshnet_name" \
+        --arg meshnet_ip "$meshnet_ip" \
+        --arg meshnet_status "$meshnet_status" \
+        --argjson peers "$peers_json" \
+        '{
+            "connected": $connected,
+            "meshnet_name": $meshnet_name,
+            "meshnet_ip": $meshnet_ip,
+            "meshnet_status": $meshnet_status,
+            "peers": $peers
+        }'
+}
+
+case "${1:-}" in
+    --status)
+        get_status
+        ;;
+    --health)
+        if nordvpn status 2>&1 | grep -qi "Meshnet.*connected\|Status: Connected"; then
+            echo "ok"
+            exit 0
+        else
+            echo "disconnected"
+            exit 1
+        fi
+        ;;
+    *)
+        get_status
+        ;;
+esac
+SCRIPT
+
+chmod +x /usr/src/status.sh
+
+# Create nginx configuration
+cat > /etc/nginx/conf.d/default.conf << 'NGINX'
+server {
+    listen 80;
+    server_name _;
+
+    # Health check endpoint
+    location /health {
+        access_log off;
+        default_type text/plain;
+        alias /usr/src/health.txt;
+    }
+
+    # Status API (returns JSON)
+    location /api/status {
+        default_type application/json;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Type '';
+        proxy_buffering off;
+        proxy_pass http://127.0.0.1:8080;
+    }
+
+    # Status page (HTML)
+    location / {
+        root /usr/src;
+        index index.html;
+    }
+}
+NGINX
+
+# Create health.txt file (used by nginx /health endpoint)
+echo "ok" > /usr/src/health.txt
+
+# Create status API backend (simple bash server on port 8080)
+cat > /usr/src/status_server.sh << 'SERVER'
+#!/bin/bash
+# Simple HTTP server that runs status.sh and returns JSON
+
+while true; do
+    # Read the HTTP request (nginx will forward the request)
+    read -r method path proto <&0
+
+    case "$path" in
+        /api/status)
+            echo -e "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r"
+            /usr/src/status.sh --status
+            ;;
+        /health)
+            echo -e "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r"
+            echo "ok"
+            ;;
+        *)
+            echo -e "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\n\r"
+            echo "<h1>404 Not Found</h1>"
+            ;;
+    esac
+
+    # Wait a bit between requests
+    sleep 0.1
+done
+SERVER
+
+chmod +x /usr/src/status_server.sh
+
+# Create the Web UI HTML
+cat > /usr/src/index.html << 'HTML'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NordVPN Meshnet Status</title>
+    <style>
+        :root {
+            --bg: #1a1a2e;
+            --card: #16213e;
+            --accent: #0f3460;
+            --text: #e4e4e4;
+            --success: #4ecca3;
+            --error: #e94560;
+            --warning: #f0c05c;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        .container { max-width: 800px; margin: 0 auto; }
+        h1 {
+            text-align: center;
+            margin-bottom: 2rem;
+            font-size: 1.8rem;
+            color: var(--success);
+        }
+        .status-card {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--accent);
+        }
+        .status-card h2 {
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+            color: var(--success);
+        }
+        .status-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--accent);
+        }
+        .status-row:last-child { border-bottom: none; }
+        .label { color: #888; }
+        .value { font-weight: 600; }
+        .connected { color: var(--success); }
+        .disconnected { color: var(--error); }
+        .peers-list {
+            list-style: none;
+            padding: 0;
+        }
+        .peers-list li {
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--accent);
+        }
+        .peers-list li:last-child { border-bottom: none; }
+        .refresh-btn {
+            display: block;
+            margin: 1rem auto;
+            padding: 0.75rem 1.5rem;
+            background: var(--accent);
+            color: var(--text);
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        .refresh-btn:hover { background: #1a5276; }
+        #error-msg {
+            color: var(--error);
+            text-align: center;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔒 NordVPN Meshnet</h1>
+
+        <button class="refresh-btn" onclick="refreshStatus()">Refresh Status</button>
+
+        <div id="status-card" class="status-card">
+            <h2>Connection Status</h2>
+            <div class="status-row">
+                <span class="label">Status:</span>
+                <span class="value" id="connection-status">Loading...</span>
+            </div>
+            <div class="status-row">
+                <span class="label">Nord Name:</span>
+                <span class="value" id="nord-name">—</span>
+            </div>
+            <div class="status-row">
+                <span class="label">Meshnet IP:</span>
+                <span class="value" id="meshnet-ip">—</span>
+            </div>
+        </div>
+
+        <div id="peers-card" class="status-card" style="display: none;">
+            <h2>Connected Peers</h2>
+            <ul class="peers-list" id="peers-list"></ul>
+        </div>
+
+        <div id="error-msg"></div>
+    </div>
+
+    <script>
+        async function refreshStatus() {
+            try {
+                const resp = await fetch('/api/status');
+                const data = await resp.json();
+
+                const statusEl = document.getElementById('connection-status');
+                statusEl.textContent = data.meshnet_status.charAt(0).toUpperCase() + data.meshnet_status.slice(1);
+                statusEl.className = 'value ' + (data.connected ? 'connected' : 'disconnected');
+
+                document.getElementById('nord-name').textContent = data.meshnet_name;
+                document.getElementById('meshnet-ip').textContent = data.meshnet_ip;
+
+                const peersList = document.getElementById('peers-list');
+                const peersCard = document.getElementById('peers-card');
+                peersList.innerHTML = '';
+
+                if (data.peers && data.peers.length > 0) {
+                    peersCard.style.display = 'block';
+                    data.peers.forEach(peer => {
+                        const li = document.createElement('li');
+                        li.textContent = peer;
+                        peersList.appendChild(li);
+                    });
+                } else {
+                    peersCard.style.display = 'none';
+                }
+
+                document.getElementById('error-msg').textContent = '';
+            } catch (err) {
+                document.getElementById('error-msg').textContent = 'Error fetching status: ' + err.message;
+            }
+        }
+
+        // Auto-refresh every 10 seconds
+        refreshStatus();
+        setInterval(refreshStatus, 10000);
+    </script>
+</body>
+</html>
+HTML
+
+# Start the status backend server
+/usr/src/status_server.sh &
+
+# Start nginx
+nginx
+
+# Keep the service running
+wait

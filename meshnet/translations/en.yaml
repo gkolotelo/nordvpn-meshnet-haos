@@ -1,0 +1,4 @@
+meshnet:
+  name: "NordVPN Meshnet"
+  state: "running"
+  state_not_running: "stopped"

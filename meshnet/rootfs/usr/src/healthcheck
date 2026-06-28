@@ -1,0 +1,11 @@
+#!/bin/bash
+# Health check script for Docker
+# Returns 0 if Meshnet is connected, 1 otherwise
+
+set -euo pipefail
+
+if nordvpn status 2>&1 | grep -qi "Meshnet.*connected\|Status: Connected"; then
+    exit 0
+else
+    exit 1
+fi

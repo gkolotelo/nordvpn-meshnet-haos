@@ -1,0 +1,36 @@
+name: "NordVPN Meshnet"
+version: "1.0.0"
+slug: "nordvpn_meshnet"
+description: "Meshnet tunnel for remote Home Assistant access"
+url: "https://github.com/gkolotelo/nordvpn-meshnet-haos"
+arch:
+  - aarch64
+  - amd64
+startup: services
+boot: auto
+init: false
+host_network: true
+privileged:
+  - NET_ADMIN
+  - NET_RAW
+devices: []
+map:
+  - addon_config:ro
+timeout: 60
+ingress: true
+ingress_port: 80
+ingress_stream: true
+options:
+  token: ""
+  nickname: ""
+  allow_routing: "*"
+  allow_local_network: "*"
+  allow_fileshare: "*"
+  allow_remote: "*"
+schema:
+  token: "str?"
+  nickname: "str?"
+  allow_routing: "str?"
+  allow_local_network: "str?"
+  allow_fileshare: "str?"
+  allow_remote: "str?"

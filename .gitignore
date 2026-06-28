@@ -1,0 +1,4 @@
+# Home Assistant Add-on: NordVPN Meshnet
+
+nordvpn_hacs/
+meshnet/rootfs/usr/src/status_server.sh
