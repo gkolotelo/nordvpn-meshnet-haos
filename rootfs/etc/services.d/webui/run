@@ -1,0 +1,137 @@
+#!/usr/bin/with-contenv bash
+set -euo pipefail
+# Web UI for Meshnet status dashboard, served via nginx through HA ingress
+
+# Create status script that nginx will proxy to
+cat > /usr/src/status.sh << 'SCRIPT'
+#!/bin/bash
+get_status() {
+    local status_output
+    status_output=$(nordvpn status 2>&1 || echo "")
+    local connected="false"
+    local meshnet_name="unknown"
+    local meshnet_ip="unknown"
+    local meshnet_status="disconnected"
+    if echo "$status_output" | grep -qi "Meshnet.*connected\|Status: Connected" 2>/dev/null; then
+        connected="true"
+        meshnet_status="connected"
+    fi
+    if echo "$status_output" | grep -qP 'Meshnet name:' 2>/dev/null; then
+        meshnet_name=$(echo "$status_output" | grep -oP 'Meshnet name: \K.*' | head -1)
+    fi
+    if echo "$status_output" | grep -qP 'Meshnet IP:' 2>/dev/null; then
+        meshnet_ip=$(echo "$status_output" | grep -oP 'Meshnet IP: \K.*' | head -1)
+    fi
+    jq -n \
+        --argjson connected "$connected" \
+        --arg meshnet_name "$meshnet_name" \
+        --arg meshnet_ip "$meshnet_ip" \
+        --arg meshnet_status "$meshnet_status" \
+        '{
+            "connected": $connected,
+            "meshnet_name": $meshnet_name,
+            "meshnet_ip": $meshnet_ip,
+            "meshnet_status": $meshnet_status
+        }'
+}
+case "${1:-}" in
+    --health)
+        if nordvpn status 2>&1 | grep -qi "Meshnet.*connected\|Status: Connected"; then
+            echo "ok"; exit 0
+        else
+            echo "disconnected"; exit 1
+        fi
+        ;;
+    *) get_status ;;
+esac
+SCRIPT
+chmod +x /usr/src/status.sh
+
+# Create status backend server
+cat > /usr/src/status_server.sh << 'SERVER'
+#!/bin/bash
+while true; do
+    read -r method path proto <&0
+    case "$path" in
+        /api/status)
+            echo -e "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r"
+            /usr/src/status.sh
+            ;;
+        /health)
+            echo -e "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r"
+            echo "ok"
+            ;;
+        *)
+            echo -e "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\n\r"
+            echo "<h1>404 Not Found</h1>"
+            ;;
+    esac
+    sleep 0.1
+done
+SERVER
+chmod +x /usr/src/status_server.sh
+
+# Create Web UI HTML
+cat > /usr/src/index.html << 'HTML'
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>NordVPN Meshnet Status</title>
+<style>
+:root{--bg:#1a1a2e;--card:#16213e;--accent:#0f3460;--text:#e4e4e4;--success:#4ecca3;--error:#e94560;--warning:#f0c05c}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:2rem}
+.container{max-width:800px;margin:0 auto}
+h1{text-align:center;margin-bottom:2rem;font-size:1.8rem;color:var(--success)}
+.status-card{background:var(--card);border-radius:12px;padding:1.5rem;margin-bottom:1.5rem;border:1px solid var(--accent)}
+.status-card h2{font-size:1.1rem;margin-bottom:1rem;color:var(--success)}
+.status-row{display:flex;justify-content:space-between;padding:0.5rem 0;border-bottom:1px solid var(--accent)}
+.status-row:last-child{border-bottom:none}
+.label{color:#888}.value{font-weight:600}
+.connected{color:var(--success)}.disconnected{color:var(--error)}
+.refresh-btn{display:block;margin:1rem auto;padding:0.75rem 1.5rem;background:var(--accent);color:var(--text);border:none;border-radius:8px;cursor:pointer;font-size:1rem}
+</style></head>
+<body><div class="container">
+<h1>🔒 NordVPN Meshnet</h1>
+<button class="refresh-btn" onclick="refreshStatus()">Refresh Status</button>
+<div id="status-card" class="status-card">
+<h2>Connection Status</h2>
+<div class="status-row"><span class="label">Status:</span><span class="value" id="connection-status">Loading...</span></div>
+<div class="status-row"><span class="label">Nord Name:</span><span class="value" id="nord-name">—</span></div>
+<div class="status-row"><span class="label">Meshnet IP:</span><span class="value" id="meshnet-ip">—</span></div>
+</div>
+<div id="peers-card" class="status-card" style="display:none"><h2>Peers</h2><ul class="peers-list" id="peers-list"></ul></div>
+<div id="error-msg"></div></div>
+<script>
+async function refreshStatus(){try{const r=await fetch('/api/status');const d=await r.json();const s=document.getElementById('connection-status');s.textContent=d.meshnet_status.charAt(0).toUpperCase()+d.meshnet_status.slice(1);s.className='value '+(d.connected?'connected':'disconnected');document.getElementById('nord-name').textContent=d.meshnet_name;document.getElementById('meshnet-ip').textContent=d.meshnet_ip}catch(e){document.getElementById('error-msg').textContent='Error: '+e.message}}
+refreshStatus();setInterval(refreshStatus,10000);
+</script></body></html>
+HTML
+
+# Create nginx config
+cat > /etc/nginx/conf.d/default.conf << 'NGINX'
+server {
+    listen 80;
+    server_name _;
+    location /health {
+        access_log off;
+        default_type text/plain;
+        alias /usr/src/health.txt;
+    }
+    location /api/status {
+        default_type application/json;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Type '';
+        proxy_buffering off;
+        proxy_pass http://127.0.0.1:8080;
+    }
+    location / {
+        root /usr/src;
+        index index.html;
+    }
+}
+NGINX
+
+echo "ok" > /usr/src/health.txt
+/usr/src/status_server.sh &
+nginx -g 'daemon off;'

@@ -1,5 +1,0 @@
-#!/usr/bin/execl -a $0 bash
-set -euo pipefail
-nginx -s quit 2>/dev/null || true
-kill $(pidof nginx 2>/dev/null) 2>/dev/null || true
-exit 0

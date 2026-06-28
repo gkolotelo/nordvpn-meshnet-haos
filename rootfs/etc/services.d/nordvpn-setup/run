@@ -10,14 +10,14 @@ for i in $(seq 1 30); do
     fi
     sleep 1
 done
-TOKEN=$(bashio::config 'token' || echo "")
+TOKEN=*** 'token' || echo "")
 NICKNAME=$(bashio::config 'nickname' || echo "")
 ALLOW_ROUTING=$(bashio::config 'allow_routing' || echo "*")
 ALLOW_LOCAL=$(bashio::config 'allow_local_network' || echo "*")
 ALLOW_FILESHARE=$(bashio::config 'allow_fileshare' || echo "*")
 ALLOW_REMOTE=$(bashio::config 'allow_remote' || echo "*")
 if [ -z "$TOKEN" ]; then
-    log "ERROR: No access token configured."
+    log "ERROR: No access token configured"
     exit 1
 fi
 log "Authenticating..."
