@@ -7,15 +7,16 @@ ARG BUILD_VERSION
 RUN \
   apt-get update && \
   apt-get install -y --no-install-recommends \
-    curl \
-    wget \
-    apt-transport-https \
-    ca-certificates \
-    jq \
-    iproute2 \
-    iptables \
-    nginx \
-    procps && \
+      curl \
+      wget \
+      gnupg \
+      apt-transport-https \
+      ca-certificates \
+      jq \
+      iproute2 \
+      iptables \
+      nginx \
+      procps && \
   curl -sL "https://repo.nordvpn.com/gpg/nordvpn_public.asc" | \
     gpg --dearmor -o /usr/share/keyrings/nordvpn.gpg && \
   echo "deb [signed-by=/usr/share/keyrings/nordvpn.gpg] https://repo.nordvpn.com/deb/nordvpn/debian stable main" > \
