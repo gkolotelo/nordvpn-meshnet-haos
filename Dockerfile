@@ -1,4 +1,4 @@
-FROM ghcr.io/hassio-addons/debian-base:13.3.0
+FROM ghcr.io/hassio-addons/debian-base:9.3.0
 
 ARG BUILD_ARCH
 ARG BUILD_VERSION

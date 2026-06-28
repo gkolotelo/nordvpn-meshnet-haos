@@ -18,8 +18,13 @@ for i in $(seq 1 30); do
     sleep 1
 done
 
-# Read configuration
-TOKEN=$(bash...n
+# Read configuration from add-on options
+TOKEN=$(bashio::config 'token' || echo "")
+NICKNAME=$(bashio::config 'nickname' || echo "")
+ALLOW_ROUTING=$(bashio::config 'allow_routing' || echo "*")
+ALLOW_LOCAL=$(bashio::config 'allow_local_network' || echo "*")
+ALLOW_FILESHARE=$(bashio::config 'allow_fileshare' || echo "*")
+ALLOW_REMOTE=$(bashio::config 'allow_remote' || echo "*")
 # Validate token
 if [ -z "$TOKEN" ]; then
     log "ERROR: No access token configured. Please add your token in the add-on options."
