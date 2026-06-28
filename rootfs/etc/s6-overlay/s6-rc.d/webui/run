@@ -1,4 +1,4 @@
-#!/usr/bin/execl -a $0 bash
+#!/usr/bin/with-contenv bash
 set -euo pipefail
 # Web UI for Meshnet status dashboard, served via nginx through HA ingress
 # Create nginx config

@@ -1,4 +1,4 @@
-#!/usr/bin/execl -a $0 bash
+#!/usr/bin/with-contenv bash
 # s6 service: One-time Meshnet setup
 set -euo pipefail
 log() { echo "[meshnet-setup] $1"; }

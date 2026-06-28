@@ -1,4 +1,4 @@
-#!/usr/bin/execl -a $0 bash
+#!/usr/bin/with-contenv bash
 # s6 service: Start the NordVPN daemon (required for all operations)
 set -euo pipefail
 echo "Starting NordVPN daemon..."
