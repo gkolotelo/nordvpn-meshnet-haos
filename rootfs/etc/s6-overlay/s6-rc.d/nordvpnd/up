@@ -1,0 +1,15 @@
+#!/usr/bin/execl -a $0 bash
+# s6 service: Start the NordVPN daemon (required for all operations)
+set -euo pipefail
+echo "Starting NordVPN daemon..."
+nordvpnd &
+DAEMON_PID=$!
+echo "NordVPN daemon started (PID: $DAEMON_PID)"
+for i in $(seq 1 30); do
+    if nordvpn status >/dev/null 2>&1; then
+        echo "NordVPN daemon is ready"
+        break
+    fi
+    sleep 1
+done
+wait $DAEMON_PID

@@ -1,0 +1,5 @@
+#!/usr/bin/execl -a $0 bash
+set -euo pipefail
+# Make sure the daemon stops cleanly
+kill -TERM $(pidof nordvpnd 2>/dev/null) 2>/dev/null || true
+exit 0

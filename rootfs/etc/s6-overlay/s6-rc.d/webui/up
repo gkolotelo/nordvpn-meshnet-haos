@@ -1,0 +1,30 @@
+#!/usr/bin/execl -a $0 bash
+set -euo pipefail
+# Web UI for Meshnet status dashboard, served via nginx through HA ingress
+# Create nginx config
+cat > /etc/nginx/conf.d/default.conf << 'NGINX'
+server {
+    listen 80;
+    server_name _;
+    location /health {
+        access_log off;
+        default_type text/plain;
+        alias /usr/src/health.txt;
+    }
+    location /api/status {
+        default_type application/json;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Type '';
+        proxy_buffering off;
+        proxy_pass http://127.0.0.1:8080;
+    }
+    location / {
+        root /usr/src;
+        index index.html;
+    }
+}
+NGINX
+echo "ok" > /usr/src/health.txt
+# Status backend server
+nohup /usr/src/status_server.sh >/dev/null 2>&1 &
+nginx -g 'daemon off;'
