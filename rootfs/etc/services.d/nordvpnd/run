@@ -1,10 +1,15 @@
 #!/usr/bin/with-contenv bash
-# s6 service: Start the NordVPN daemon (required for all operations)
 set -euo pipefail
+
+echo "=== NordVPN Meshnet Starting ==="
+
+# Start the NordVPN daemon
 echo "Starting NordVPN daemon..."
 nordvpnd &
 DAEMON_PID=$!
 echo "NordVPN daemon started (PID: $DAEMON_PID)"
+
+# Wait for daemon to be ready
 for i in $(seq 1 30); do
     if nordvpn status >/dev/null 2>&1; then
         echo "NordVPN daemon is ready"
@@ -12,4 +17,75 @@ for i in $(seq 1 30); do
     fi
     sleep 1
 done
+
+# Authenticate if token is provided
+TOKEN=*** 'token' || echo "")
+if [ -n "$TOKEN" ]; then
+    echo "Authenticating with NordVPN..."
+    nordvpn login --token "$TOKEN" 2>&1 || echo "Auth failed (maybe already authenticated)"
+    echo "Enabling Meshnet..."
+    nordvpn set meshnet on 2>&1 || true
+    NICKNAME=$(bashio::config 'nickname' || echo "")
+    if [ -n "$NICKNAME" ]; then
+        nordvpn nickname set "$NICKNAME" 2>&1 || true
+    fi
+    nordvpn status 2>&1 || true
+fi
+
+# Start Web UI
+echo "Setting up Web UI..."
+mkdir -p /usr/src
+cat > /usr/src/index.html << 'HTML'
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>NordVPN Meshnet</title>
+<style>:root{--bg:#1a1a2e;--card:#16213e;--accent:#0f3460;--text:#e4e4e4;--success:#4ecca3;--error:#e94560}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);padding:2rem}
+h1{text-align:center;color:var(--success);margin-bottom:2rem}
+.card{background:var(--card);border-radius:12px;padding:1.5rem;border:1px solid var(--accent)}
+.card div{padding:0.5rem 0}
+.label{color:#888}.connected{color:var(--success)}.disconnected{color:var(--error)}
+</style></head><body>
+<h1>🔒 NordVPN Meshnet</h1>
+<div class="card">
+<div><span class="label">Status: </span><span id="s">Loading...</span></div>
+<div><span class="label">Nord Name: </span><span id="n">—</span></div>
+<div><span class="label">Meshnet IP: </span><span id="i">—</span></div>
+</div>
+<script>
+fetch('/api/status').then(r=>r.json()).then(d=>{
+document.getElementById('s').textContent=d.meshnet_status;document.getElementById('s').className=d.connected?'connected':'disconnected'
+document.getElementById('n').textContent=d.meshnet_name;document.getElementById('i').textContent=d.meshnet_ip
+}).catch(e=>document.getElementById('s').textContent='Error')
+</script></body></html>
+HTML
+
+# Status API
+while true; do
+    echo -e "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r"
+    nordvpn status 2>/dev/null | jq -Rn '{
+        connected: (input | test("connected"; "i")),
+        meshnet_name: (try (inputs | capture("Meshnet name: (?<v>.*)").v) // "unknown"),
+        meshnet_ip: (try (inputs | capture("Meshnet IP: (?<v>.*)").v) // "unknown"),
+        meshnet_status: (if input | test("connected"; "i") then "connected" else "disconnected" end)
+    }' 2>/dev/null || echo '{"connected":false,"meshnet_status":"error"}'
+    sleep 10
+done | ncat -l -k -p 8080 -e /bin/cat 2>/dev/null &
+
+# Start nginx for ingress
+cat > /etc/nginx/conf.d/default.conf << 'NGINX'
+server {
+    listen 80;
+    location /api/status {
+        proxy_pass http://127.0.0.1:8080;
+    }
+    location / {
+        root /usr/src;
+        index index.html;
+    }
+}
+NGINX
+nginx -g 'daemon off;' 2>&1 || true
+
+# Keep the process alive
 wait $DAEMON_PID
