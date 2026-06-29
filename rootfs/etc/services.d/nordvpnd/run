@@ -18,14 +18,28 @@ for i in $(seq 1 30); do
     sleep 1
 done
 
-# Authenticate if token is provided
-TOKEN=$(bashio::config 'token' || echo "")
+# Authenticate if token is provided — read from /data/options.json (bashio unavailable with init: false)
+CONFIG_FILE="/data/options.json"
+if [ -f "$CONFIG_FILE" ]; then
+    TOKEN=$(python3 -c "
+import json,sys
+try:
+    with open('/data/options.json') as f:
+        print(json.load(f).get('token',''))
+except: print('')" 2>/dev/null)
+fi
+: "${TOKEN:=}"
 if [ -n "$TOKEN" ]; then
     echo "Authenticating with NordVPN..."
     nordvpn login --token "$TOKEN" 2>&1 || echo "Auth failed (maybe already authenticated)"
     echo "Enabling Meshnet..."
     nordvpn set meshnet on 2>&1 || true
-    NICKNAME=$(bashio::config 'nickname' || echo "")
+    NICKNAME=*** -c "
+import json,sys
+try:
+    with open('/data/options.json') as f:
+        print(json.load(f).get('nickname',''))
+except: print('')" 2>/dev/null)
     if [ -n "$NICKNAME" ]; then
         nordvpn nickname set "$NICKNAME" 2>&1 || true
     fi
