@@ -109,14 +109,12 @@ ingress_port: 80
 options:
   token: ""
   nickname: ""
-  allow_routing: "*"
   allow_local_network: "*"
   allow_fileshare: "*"
   allow_remote: "*"
 schema:
   token: "str?"
   nickname: "str?"
-  allow_routing: "str?"
   allow_local_network: "str?"
   allow_fileshare: "str?"
   allow_remote: "str?"
@@ -140,18 +138,6 @@ Full user documentation: installation, token generation, configuration options, 
 - Waits for it to be ready (polls `nordvpn status` until it responds)
 - Must start first (other services depend on it)
 
-### 2.2 `nordvpn-setup` service — one-time configuration
-- Reads `/data/options.json` via `bashio`
-- Authenticates: `nordvpn login --token "<token>"`
-- Enables Meshnet: `nordvpn set meshnet on`
-- Sets nickname (optional): `nordvpn nickname set "<name>"`
-- Configures peer permissions:
-  - `nordvpn meshnet peer allow routing <peers>`
-  - `nordvpn meshnet peer allow local <peers>`
-  - `nordvpn meshnet peer allow fileshare <peers>`
-  - `nordvpn meshnet peer allow remote <peers>`
-- `*` wildcard = allow for all peers
-- Exits after setup (s6 runs it once on first boot; token persists in daemon state)
 
 ### 2.3 `webui` service — status dashboard
 - Lightweight nginx serving a static HTML page
