@@ -74,36 +74,42 @@ document.getElementById('n').textContent=d.meshnet_name;document.getElementById(
 </script></body></html>
 HTML
 
-# Status API — simple shell-based JSON endpoint
-serve_status() {
-    local status connected meshnet_name meshnet_ip
-    status=$(nordvpn status 2>/dev/null || true)
+# Status API — Python HTTP server
+cat > /usr/src/status_server.py << 'PYTHON'
+import http.server
+import json
+import subprocess
+import re
 
-    if echo "$status" | grep -qi "Status: Connected"; then
-        connected=true
-    else
-        connected=false
-    fi
+class StatusHandler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.end_headers()
 
-    meshnet_name=$(echo "$status" | grep -i "Meshnet name:" | sed 's/.*Meshnet name: //' | tr -d '\r')
-    meshnet_ip=$(echo "$status" | grep -i "Meshnet IP:" | sed 's/.*Meshnet IP: //' | tr -d '\r')
+        result = {"connected": False, "meshnet_name": "unknown",
+                   "meshnet_ip": "unknown", "meshnet_status": "disconnected"}
 
-    [ -z "$meshnet_name" ] && meshnet_name="unknown"
-    [ -z "$meshnet_ip" ] && meshnet_ip="unknown"
+        try:
+            output = subprocess.check_output(
+                ["nordvpn", "status"], stderr=subprocess.DEVNULL,
+                timeout=10).decode()
+            result["connected"] = "Status: Connected" in output
+            m = re.search(r"Meshnet name:\s*(\S+)", output)
+            if m: result["meshnet_name"] = m.group(1)
+            m = re.search(r"Meshnet IP:\s*(\S+)", output)
+            if m: result["meshnet_ip"] = m.group(1)
+            result["meshnet_status"] = "connected" if result["connected"] else "disconnected"
+        except Exception:
+            pass
 
-    printf '{"connected":%s,"meshnet_name":"%s","meshnet_ip":"%s","meshnet_status":"%s"}\n' \
-        "$connected" "$meshnet_name" "$meshnet_ip" \
-        "$( [ "$connected" = "true" ] && echo "connected" || echo "disconnected" )"
-}
+        self.wfile.write(json.dumps(result).encode())
 
-# Simple HTTP server for /api/status
-while true; do
-    (
-        echo -e "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r"
-        serve_status
-    ) | ncat -l -p 8080 -w 1 -q 1 2>/dev/null
-    sleep 1
-done &
+    def log_message(self, format, *args): pass
+
+http.server.HTTPServer(('127.0.0.1', 8080), StatusHandler).serve_forever()
+PYTHON
+python3 /usr/src/status_server.py &
 echo "Status API server started on port 8080"
 
 # Start nginx for ingress

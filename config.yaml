@@ -1,5 +1,5 @@
 name: "NordVPN Meshnet"
-version: "1.0.9"
+version: "1.0.10"
 slug: "nordvpn_meshnet"
 description: "Meshnet tunnel for remote Home Assistant access"
 url: "https://github.com/gkolotelo/nordvpn-meshnet-haos"
