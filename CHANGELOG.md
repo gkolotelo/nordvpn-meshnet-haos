@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.0.15 (2026-06-29)
+
+- Disable NordVPN traffic routing on startup so Meshnet no longer needs to change host rp_filter/sysctl settings inside the add-on container.
+
 ## v1.0.14 (2026-06-29)
 
 - Grant full add-on privileges needed by NordVPN to update `rp_filter` and install Meshnet routing rules.

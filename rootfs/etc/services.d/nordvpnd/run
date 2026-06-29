@@ -51,6 +51,8 @@ fi
 if [ -n "$TOKEN" ]; then
     echo "Authenticating with NordVPN..."
     nordvpn login --token "$TOKEN" 2>&1 || echo "Auth failed (maybe already authenticated)"
+    echo "Disabling traffic routing..."
+    nordvpn set routing off 2>&1 || true
     echo "Enabling Meshnet..."
     nordvpn set meshnet on 2>&1 || true
     NICKNAME="$(jq -r '.nickname // ""' "$CONFIG_FILE" 2>/dev/null || true)"
