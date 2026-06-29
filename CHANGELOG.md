@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.0.16 (2026-06-29)
+
+- Always derive the Meshnet nickname from the add-on hostname and move traffic-routing disablement to after Meshnet activation.
+
 ## v1.0.15 (2026-06-29)
 
 - Disable NordVPN traffic routing on startup so Meshnet no longer needs to change host rp_filter/sysctl settings inside the add-on container.
