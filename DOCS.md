@@ -47,7 +47,6 @@ nickname: "home-assistant"
 Control what Meshnet peers can do through your device. Use `*` to allow all peers, or specify peer names:
 
 ```yaml
-allow_routing: "peer-atlas.nord,peer-fuji.nord"
 allow_local_network: "*"
 allow_fileshare: "*"
 allow_remote: "*"
@@ -55,7 +54,6 @@ allow_remote: "*"
 
 | Permission | What it does | Default |
 |---|---|---|
-| `routing` | Peer can route internet traffic through this node | All peers |
 | `local_network` | Peer can reach your LAN devices through this node | All peers |
 | `fileshare` | Peer can use NordVPN file sharing with this node | All peers |
 | `remote` | Peer can access services on this node (HA Web UI, SSH, etc.) | All peers |
@@ -65,7 +63,6 @@ allow_remote: "*"
 ```yaml
 token: "your-access-token-here"
 nickname: "home-assistant"
-allow_routing: "*"
 allow_local_network: "peer-phone.nord,peer-laptop.nord"
 allow_fileshare: "*"
 allow_remote: "*"

@@ -7,7 +7,7 @@ A Home Assistant OS add-on that runs the official NordVPN Linux client in **Mesh
 - **Headless authentication** — Uses NordVPN's access token (no browser required)
 - **Meshnet-only mode** — Creates a peer-to-peer encrypted network, not a traditional VPN tunnel
 - **System-wide tunnel** — `host_network: true` makes the tunnel visible on the host, so HA and other add-ons are reachable from Meshnet peers
-- **Configurable peer permissions** — Control what each peer can do (routing, LAN access, file sharing, remote access)
+- **Configurable peer permissions** — Control what each peer can do (LAN access, file sharing, remote access)
 - **Web UI** — Status dashboard accessible from the HA sidebar via ingress
 - **Health checks** — Docker and HA monitor connection status
 

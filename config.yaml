@@ -1,5 +1,5 @@
 name: "NordVPN Meshnet"
-version: "1.0.16"
+version: "1.0.17"
 slug: "nordvpn_meshnet"
 description: "Meshnet tunnel for remote Home Assistant access"
 url: "https://github.com/gkolotelo/nordvpn-meshnet-haos"
@@ -26,14 +26,12 @@ ingress_stream: true
 options:
   token: ""
   nickname: ""
-  allow_routing: "*"
   allow_local_network: "*"
   allow_fileshare: "*"
   allow_remote: "*"
 schema:
   token: "str?"
   nickname: "str?"
-  allow_routing: "str?"
   allow_local_network: "str?"
   allow_fileshare: "str?"
   allow_remote: "str?"

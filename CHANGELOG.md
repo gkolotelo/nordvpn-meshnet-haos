@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.0.17 (2026-06-29)
+
+- Remove traffic-routing from the add-on startup path so Meshnet runs in direct-access mode only.
+
 ## v1.0.16 (2026-06-29)
 
 - Always derive the Meshnet nickname from the add-on hostname and move traffic-routing disablement to after Meshnet activation.
