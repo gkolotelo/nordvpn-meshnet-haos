@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.0.13 (2026-06-29)
+
+- Avoid using `nordvpn status` for daemon readiness because it can trigger the analytics consent prompt.
+- Pre-seed analytics consent as disabled before running authentication/status commands in the non-interactive add-on container.
+
 ## v1.0.12 (2026-06-29)
 
 - Fix startup script syntax for reading token/nickname with `jq`.
