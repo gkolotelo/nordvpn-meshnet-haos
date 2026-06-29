@@ -24,7 +24,8 @@ RUN \
   apt-get update && \
   apt-get install -y --no-install-recommends nordvpn && \
   apt-get clean && \
-  rm -rf /var/lib/apt/lists/* /var/cache/apt/*
+  rm -rf /var/lib/apt/lists/* /var/cache/apt/* && \
+  rm -f /etc/nginx/sites-enabled/default
 
 # Copy rootfs overlay
 COPY rootfs/ /

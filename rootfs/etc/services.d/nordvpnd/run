@@ -60,17 +60,37 @@ document.getElementById('n').textContent=d.meshnet_name;document.getElementById(
 </script></body></html>
 HTML
 
-# Status API
+# Status API — simple shell-based JSON endpoint
+serve_status() {
+    local status connected meshnet_name meshnet_ip
+    status=$(nordvpn status 2>/dev/null || true)
+
+    if echo "$status" | grep -qi "Status: Connected"; then
+        connected=true
+    else
+        connected=false
+    fi
+
+    meshnet_name=$(echo "$status" | grep -i "Meshnet name:" | sed 's/.*Meshnet name: //' | tr -d '\r')
+    meshnet_ip=$(echo "$status" | grep -i "Meshnet IP:" | sed 's/.*Meshnet IP: //' | tr -d '\r')
+
+    [ -z "$meshnet_name" ] && meshnet_name="unknown"
+    [ -z "$meshnet_ip" ] && meshnet_ip="unknown"
+
+    printf '{"connected":%s,"meshnet_name":"%s","meshnet_ip":"%s","meshnet_status":"%s"}\n' \
+        "$connected" "$meshnet_name" "$meshnet_ip" \
+        "$( [ "$connected" = "true" ] && echo "connected" || echo "disconnected" )"
+}
+
+# Simple HTTP server for /api/status
 while true; do
-    echo -e "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r"
-    nordvpn status 2>/dev/null | jq -Rn '{
-        connected: (input | test("connected"; "i")),
-        meshnet_name: (try (inputs | capture("Meshnet name: (?<v>.*)").v) // "unknown"),
-        meshnet_ip: (try (inputs | capture("Meshnet IP: (?<v>.*)").v) // "unknown"),
-        meshnet_status: (if input | test("connected"; "i") then "connected" else "disconnected" end)
-    }' 2>/dev/null || echo '{"connected":false,"meshnet_status":"error"}'
-    sleep 10
-done | ncat -l -k -p 8080 -e /bin/cat 2>/dev/null &
+    (
+        echo -e "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r"
+        serve_status
+    ) | ncat -l -p 8080 -w 1 -q 1 2>/dev/null
+    sleep 1
+done &
+echo "Status API server started on port 8080"
 
 # Start nginx for ingress
 mkdir -p /etc/nginx/conf.d
