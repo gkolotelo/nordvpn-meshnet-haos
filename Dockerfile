@@ -15,6 +15,7 @@ RUN \
       jq \
       iproute2 \
       iptables \
+      ncat \
       nginx \
       procps && \
   curl -sL "https://repo.nordvpn.com/gpg/nordvpn_public.asc" | \

@@ -3,10 +3,28 @@ set -euo pipefail
 
 echo "=== NordVPN Meshnet Starting ==="
 
+# NordVPN needs a stable machine ID; HA add-on containers do not always provide one.
+if [ ! -s /data/machine-id ]; then
+    od -An -N16 -tx1 /dev/urandom | tr -d ' \n' > /data/machine-id
+fi
+cp /data/machine-id /etc/machine-id
+mkdir -p /var/lib/dbus
+cp /data/machine-id /var/lib/dbus/machine-id
+
+# A failed previous service start can leave nordvpnd running and make the next
+# start fail with "daemon is already running".
+if pgrep -x nordvpnd >/dev/null 2>&1; then
+    echo "Stopping existing NordVPN daemon..."
+    pkill -TERM -x nordvpnd || true
+    sleep 2
+    pkill -KILL -x nordvpnd || true
+fi
+
 # Start the NordVPN daemon
 echo "Starting NordVPN daemon..."
 nordvpnd &
 DAEMON_PID=$!
+trap 'kill "$DAEMON_PID" 2>/dev/null || true' EXIT INT TERM
 echo "NordVPN daemon started (PID: $DAEMON_PID)"
 
 # Wait for daemon to be ready
@@ -22,14 +40,14 @@ done
 CONFIG_FILE="/data/options.json"
 TOKEN=""
 if [ -f "$CONFIG_FILE" ]; then
-    TOKEN=*** -r '.token // ""' "$CONFIG_FILE" 2>/dev/null || true)
+    TOKEN="$(jq -r '.token // ""' "$CONFIG_FILE" 2>/dev/null || true)"
 fi
 if [ -n "$TOKEN" ]; then
     echo "Authenticating with NordVPN..."
     nordvpn login --token "$TOKEN" 2>&1 || echo "Auth failed (maybe already authenticated)"
     echo "Enabling Meshnet..."
     nordvpn set meshnet on 2>&1 || true
-    NICKNAME=*** -r '.nickname // ""' /data/options.json 2>/dev/null)
+    NICKNAME="$(jq -r '.nickname // ""' "$CONFIG_FILE" 2>/dev/null || true)"
     if [ -n "$NICKNAME" ]; then
         nordvpn nickname set "$NICKNAME" 2>&1 || true
     fi
@@ -65,23 +83,30 @@ document.getElementById('n').textContent=d.meshnet_name;document.getElementById(
 HTML
 
 # Status API — proper HTTP response via ncat
+cat > /usr/src/status_api.sh << 'STATUS_API'
+#!/usr/bin/env bash
+set -euo pipefail
+
 serve_status() {
     local status m i
     status=$(nordvpn status 2>/dev/null || true)
 
-    echo -e "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r"
+    printf 'HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n'
 
     if echo "$status" | grep -qi "Status: Connected"; then
         m=$(echo "$status" | sed -n 's/.*Meshnet name:\s*//p' | tr -d '\r\n')
         i=$(echo "$status" | sed -n 's/.*Meshnet IP:\s*//p' | tr -d '\r\n')
-        echo '{"connected":true,"meshnet_name":"'"${m:-unknown}"'","meshnet_ip":"'"${i:-unknown}"'","meshnet_status":"connected"}'
+        jq -nc --arg name "${m:-unknown}" --arg ip "${i:-unknown}" \
+            '{connected:true,meshnet_name:$name,meshnet_ip:$ip,meshnet_status:"connected"}'
     else
-        echo '{"connected":false,"meshnet_name":"unknown","meshnet_ip":"unknown","meshnet_status":"disconnected"}'
+        jq -nc '{connected:false,meshnet_name:"unknown",meshnet_ip:"unknown",meshnet_status:"disconnected"}'
     fi
 }
-export -f serve_status
+serve_status
+STATUS_API
+chmod +x /usr/src/status_api.sh
 
-ncat -l -k -p 8080 --sh-exec "serve_status" 2>/dev/null &
+ncat -l -k -p 8080 --sh-exec /usr/src/status_api.sh 2>/dev/null &
 echo "Status API server started on port 8080"
 
 # Start nginx for ingress
