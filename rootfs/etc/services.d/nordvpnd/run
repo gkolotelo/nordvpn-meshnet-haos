@@ -20,26 +20,16 @@ done
 
 # Authenticate if token is provided — read from /data/options.json (bashio unavailable with init: false)
 CONFIG_FILE="/data/options.json"
+TOKEN=""
 if [ -f "$CONFIG_FILE" ]; then
-    TOKEN=$(python3 -c "
-import json,sys
-try:
-    with open('/data/options.json') as f:
-        print(json.load(f).get('token',''))
-except: print('')" 2>/dev/null)
+    TOKEN=*** -r '.token // ""' "$CONFIG_FILE" 2>/dev/null || true)
 fi
-: "${TOKEN:=}"
 if [ -n "$TOKEN" ]; then
     echo "Authenticating with NordVPN..."
     nordvpn login --token "$TOKEN" 2>&1 || echo "Auth failed (maybe already authenticated)"
     echo "Enabling Meshnet..."
     nordvpn set meshnet on 2>&1 || true
-    NICKNAME=*** -c "
-import json,sys
-try:
-    with open('/data/options.json') as f:
-        print(json.load(f).get('nickname',''))
-except: print('')" 2>/dev/null)
+    NICKNAME=*** -r '.nickname // ""' /data/options.json 2>/dev/null)
     if [ -n "$NICKNAME" ]; then
         nordvpn nickname set "$NICKNAME" 2>&1 || true
     fi
@@ -74,42 +64,24 @@ document.getElementById('n').textContent=d.meshnet_name;document.getElementById(
 </script></body></html>
 HTML
 
-# Status API — Python HTTP server
-cat > /usr/src/status_server.py << 'PYTHON'
-import http.server
-import json
-import subprocess
-import re
+# Status API — proper HTTP response via ncat
+serve_status() {
+    local status m i
+    status=$(nordvpn status 2>/dev/null || true)
 
-class StatusHandler(http.server.BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header('Content-Type', 'application/json')
-        self.end_headers()
+    echo -e "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r"
 
-        result = {"connected": False, "meshnet_name": "unknown",
-                   "meshnet_ip": "unknown", "meshnet_status": "disconnected"}
+    if echo "$status" | grep -qi "Status: Connected"; then
+        m=$(echo "$status" | sed -n 's/.*Meshnet name:\s*//p' | tr -d '\r\n')
+        i=$(echo "$status" | sed -n 's/.*Meshnet IP:\s*//p' | tr -d '\r\n')
+        echo '{"connected":true,"meshnet_name":"'"${m:-unknown}"'","meshnet_ip":"'"${i:-unknown}"'","meshnet_status":"connected"}'
+    else
+        echo '{"connected":false,"meshnet_name":"unknown","meshnet_ip":"unknown","meshnet_status":"disconnected"}'
+    fi
+}
+export -f serve_status
 
-        try:
-            output = subprocess.check_output(
-                ["nordvpn", "status"], stderr=subprocess.DEVNULL,
-                timeout=10).decode()
-            result["connected"] = "Status: Connected" in output
-            m = re.search(r"Meshnet name:\s*(\S+)", output)
-            if m: result["meshnet_name"] = m.group(1)
-            m = re.search(r"Meshnet IP:\s*(\S+)", output)
-            if m: result["meshnet_ip"] = m.group(1)
-            result["meshnet_status"] = "connected" if result["connected"] else "disconnected"
-        except Exception:
-            pass
-
-        self.wfile.write(json.dumps(result).encode())
-
-    def log_message(self, format, *args): pass
-
-http.server.HTTPServer(('127.0.0.1', 8080), StatusHandler).serve_forever()
-PYTHON
-python3 /usr/src/status_server.py &
+ncat -l -k -p 8080 --sh-exec "serve_status" 2>/dev/null &
 echo "Status API server started on port 8080"
 
 # Start nginx for ingress
