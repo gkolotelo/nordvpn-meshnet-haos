@@ -1,5 +1,5 @@
 name: "NordVPN Meshnet"
-version: "1.0.13"
+version: "1.0.14"
 slug: "nordvpn_meshnet"
 description: "Meshnet tunnel for remote Home Assistant access"
 url: "https://github.com/gkolotelo/nordvpn-meshnet-haos"
@@ -10,7 +10,10 @@ startup: services
 boot: auto
 init: false
 host_network: true
+full_access: true
+apparmor: false
 privileged:
+  - SYS_ADMIN
   - NET_ADMIN
   - NET_RAW
 devices: []

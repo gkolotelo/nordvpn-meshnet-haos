@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.0.14 (2026-06-29)
+
+- Grant full add-on privileges needed by NordVPN to update `rp_filter` and install Meshnet routing rules.
+- Use the NordVPN 5.x Meshnet nickname command (`nordvpn meshnet set nickname`) and fall back to the container hostname when no nickname is configured.
+
 ## v1.0.13 (2026-06-29)
 
 - Avoid using `nordvpn status` for daemon readiness because it can trigger the analytics consent prompt.

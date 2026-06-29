@@ -54,8 +54,11 @@ if [ -n "$TOKEN" ]; then
     echo "Enabling Meshnet..."
     nordvpn set meshnet on 2>&1 || true
     NICKNAME="$(jq -r '.nickname // ""' "$CONFIG_FILE" 2>/dev/null || true)"
+    if [ -z "$NICKNAME" ]; then
+        NICKNAME="$(hostname -s 2>/dev/null || true)"
+    fi
     if [ -n "$NICKNAME" ]; then
-        nordvpn nickname set "$NICKNAME" 2>&1 || true
+        nordvpn meshnet set nickname "$NICKNAME" 2>&1 || true
     fi
     nordvpn status 2>&1 || true
 fi
